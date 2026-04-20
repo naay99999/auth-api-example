@@ -8,6 +8,10 @@ import { AuthService } from './service'
 
 const ACCESS_TOKEN_EXPIRES_IN = 900 // seconds, matches JWT_CONFIG exp '15m'
 
+type AuthModuleOptions = {
+  enableRateLimit?: boolean
+}
+
 function getRefreshTokenValue(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
@@ -26,7 +30,13 @@ const authPlugin = new Elysia({ name: 'Auth.Plugin' })
     },
   })
 
-export const authModule = new Elysia({ prefix: '/api/v1/auth' })
+export function createAuthModule(options: AuthModuleOptions = {}) {
+  const enableRateLimit = options.enableRateLimit ?? true
+  const registerRateLimit = enableRateLimit ? [rateLimit({ max: 5, duration: 15 * 60 * 1000 })] : []
+  const loginRateLimit = enableRateLimit ? [rateLimit({ max: 5, duration: 15 * 60 * 1000 })] : []
+  const refreshRateLimit = enableRateLimit ? [rateLimit({ max: 10, duration: 15 * 60 * 1000 })] : []
+
+  return new Elysia({ prefix: '/api/v1/auth' })
   .use(authPlugin)
   .model({ 'auth.register': AuthModel.register, 'auth.login': AuthModel.login })
   .post(
@@ -59,7 +69,7 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
         description: 'Create a new user, issue an access token, and set a refresh token cookie.',
         tags: ['Auth'],
       },
-      use: [rateLimit({ max: 5, duration: 15 * 60 * 1000 })],
+      use: registerRateLimit,
     },
   )
   .post(
@@ -92,7 +102,7 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
         description: 'Authenticate a user, issue an access token, and set a refresh token cookie.',
         tags: ['Auth'],
       },
-      use: [rateLimit({ max: 5, duration: 15 * 60 * 1000 })],
+      use: loginRateLimit,
     },
   )
   .post(
@@ -118,7 +128,7 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
         tags: ['Auth'],
         security: [{ refreshCookie: [] }],
       },
-      use: [rateLimit({ max: 10, duration: 15 * 60 * 1000 })],
+      use: refreshRateLimit,
     },
   )
   .post(
@@ -180,3 +190,6 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
       },
     },
   )
+}
+
+export const authModule = createAuthModule()
