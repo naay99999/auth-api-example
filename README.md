@@ -89,6 +89,8 @@ Seed demo users for documentation and manual testing:
 bun run db:seed
 ```
 
+For safety, seeding is blocked when `NODE_ENV=production`. To intentionally seed a production-configured environment, set `ALLOW_DEMO_SEED=true`.
+
 The seed is idempotent. It uses `email` as the conflict key, updates demo user names and password hashes, and keeps existing user IDs and `createdAt` values.
 
 Demo credentials:
@@ -159,11 +161,14 @@ curl -i -b cookies.txt -X POST http://localhost:5678/api/v1/auth/logout \
 | Command | Description |
 |---|---|
 | `bun run dev` | Start the API with hot reload |
+| `bun run lint` | Run Biome lint checks |
+| `bun run typecheck` | Run TypeScript type checking |
+| `bun run test` | Run Bun tests |
+| `bun run check` | Run lint, typecheck, and tests |
 | `bun run db:generate` | Generate Drizzle migration files |
 | `bun run db:migrate` | Apply migrations to Turso |
 | `bun run db:seed` | Seed demo users |
 | `bun run db:studio` | Open Drizzle Studio |
-| `bun run test` | Not configured yet |
 
 ## Project Structure
 

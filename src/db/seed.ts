@@ -1,7 +1,7 @@
 import { ulid } from 'ulidx'
-import { db } from './client'
 import { users } from './schema'
 import { hashPassword } from '../lib/hash'
+import { assertDemoSeedAllowed } from './seed-guard'
 
 const DEMO_PASSWORD = 'Password123!'
 
@@ -12,6 +12,9 @@ const demoUsers = [
 ]
 
 async function seed() {
+  assertDemoSeedAllowed(process.env)
+
+  const { db } = await import('./client')
   const now = Math.floor(Date.now() / 1000)
 
   for (const user of demoUsers) {

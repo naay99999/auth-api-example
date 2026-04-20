@@ -4,6 +4,7 @@ import { ulid } from 'ulidx'
 import { db } from '../../db/client'
 import { users, refreshTokens } from '../../db/schema'
 import { hashPassword, verifyPassword, hashToken } from '../../lib/hash'
+import { generateRefreshToken } from '../../lib/token'
 import type { RegisterDTO, LoginDTO } from './model'
 
 const REFRESH_TTL_SECONDS = 7 * 24 * 60 * 60 // 7 days
@@ -19,7 +20,7 @@ function cookieOptions() {
 }
 
 async function issueRefreshToken(userId: string): Promise<string> {
-  const rawToken = ulid()
+  const rawToken = generateRefreshToken()
   const tokenHash = await hashToken(rawToken)
   const now = Math.floor(Date.now() / 1000)
 
@@ -88,40 +89,39 @@ export const AuthService = {
 
     const tokenHash = await hashToken(rawToken)
     const now = Math.floor(Date.now() / 1000)
-
-    const existing = await db
-      .select()
-      .from(refreshTokens)
-      .where(
-        and(
-          eq(refreshTokens.tokenHash, tokenHash),
-          isNull(refreshTokens.revokedAt),
-          gt(refreshTokens.expiresAt, now),
-        ),
-      )
-      .get()
-
-    if (!existing) return status(401, 'Token invalid or expired')
-
-    const newRawToken = ulid()
+    const newRawToken = generateRefreshToken()
     const newTokenHash = await hashToken(newRawToken)
 
-    await db.transaction(async (tx) => {
-      await tx
+    const rotated = await db.transaction(async (tx) => {
+      const revoked = await tx
         .update(refreshTokens)
         .set({ revokedAt: now })
-        .where(eq(refreshTokens.id, existing.id))
+        .where(
+          and(
+            eq(refreshTokens.tokenHash, tokenHash),
+            isNull(refreshTokens.revokedAt),
+            gt(refreshTokens.expiresAt, now),
+          ),
+        )
+        .returning({ userId: refreshTokens.userId })
+        .get()
+
+      if (!revoked) return undefined
 
       await tx.insert(refreshTokens).values({
         id: ulid(),
-        userId: existing.userId,
+        userId: revoked.userId,
         tokenHash: newTokenHash,
         expiresAt: now + REFRESH_TTL_SECONDS,
         createdAt: now,
       })
+
+      return { userId: revoked.userId, newRawToken }
     })
 
-    return { userId: existing.userId, newRawToken }
+    if (!rotated) return status(401, 'Token invalid or expired')
+
+    return rotated
   },
 
   async logout(rawToken: string | undefined, userId: string) {

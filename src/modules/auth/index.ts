@@ -8,6 +8,10 @@ import { AuthService } from './service'
 
 const ACCESS_TOKEN_EXPIRES_IN = 900 // seconds, matches JWT_CONFIG exp '15m'
 
+function getRefreshTokenValue(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+
 const authPlugin = new Elysia({ name: 'Auth.Plugin' })
   .use(jwt(JWT_CONFIG))
   .use(bearer())
@@ -16,7 +20,7 @@ const authPlugin = new Elysia({ name: 'Auth.Plugin' })
       async resolve({ bearer, jwt, status }) {
         if (!bearer) return status(401, 'Unauthorized')
         const payload = await jwt.verify(bearer)
-        if (!payload || !payload.sub) return status(401, 'Unauthorized')
+        if (payload === false || !payload.sub) return status(401, 'Unauthorized')
         return { userId: payload.sub as string }
       },
     },
@@ -94,7 +98,7 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
   .post(
     '/refresh',
     async ({ cookie: { refresh_token }, jwt }) => {
-      const result = await AuthService.refresh(refresh_token.value)
+      const result = await AuthService.refresh(getRefreshTokenValue(refresh_token.value))
       if (!('userId' in result)) return result
 
       const accessToken = await jwt.sign({ sub: result.userId })
@@ -106,6 +110,7 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
       response: {
         200: AuthModel.refreshResponse,
         401: AuthModel.textError,
+        429: AuthModel.textError,
       },
       detail: {
         summary: 'Refresh access token',
@@ -113,12 +118,13 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
         tags: ['Auth'],
         security: [{ refreshCookie: [] }],
       },
+      use: [rateLimit({ max: 10, duration: 15 * 60 * 1000 })],
     },
   )
   .post(
     '/logout',
-    async ({ cookie: { refresh_token }, userId }: { userId: string; cookie: any }) => {
-      await AuthService.logout(refresh_token.value, userId)
+    async ({ cookie: { refresh_token }, userId }) => {
+      await AuthService.logout(getRefreshTokenValue(refresh_token.value), userId)
       refresh_token.remove()
       return { message: 'Logged out successfully' }
     },
@@ -138,7 +144,7 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
   )
   .post(
     '/logout-all',
-    async ({ userId, cookie: { refresh_token } }: { userId: string; cookie: any }) => {
+    async ({ userId, cookie: { refresh_token } }) => {
       await AuthService.logoutAll(userId)
       refresh_token.remove()
       return { message: 'All sessions revoked' }
@@ -159,7 +165,7 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
   )
   .get(
     '/me',
-    ({ userId }: { userId: string }) => AuthService.getMe(userId),
+    ({ userId }) => AuthService.getMe(userId),
     {
       isAuth: true,
       response: {
