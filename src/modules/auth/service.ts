@@ -103,12 +103,23 @@ export const AuthService = {
 
     if (!existing) return status(401, 'Token invalid or expired')
 
-    await db
-      .update(refreshTokens)
-      .set({ revokedAt: now })
-      .where(eq(refreshTokens.id, existing.id))
+    const newRawToken = ulid()
+    const newTokenHash = await hashToken(newRawToken)
 
-    const newRawToken = await issueRefreshToken(existing.userId)
+    await db.transaction(async (tx) => {
+      await tx
+        .update(refreshTokens)
+        .set({ revokedAt: now })
+        .where(eq(refreshTokens.id, existing.id))
+
+      await tx.insert(refreshTokens).values({
+        id: ulid(),
+        userId: existing.userId,
+        tokenHash: newTokenHash,
+        expiresAt: now + REFRESH_TTL_SECONDS,
+        createdAt: now,
+      })
+    })
 
     return { userId: existing.userId, newRawToken }
   },
