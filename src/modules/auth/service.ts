@@ -13,7 +13,7 @@ function cookieOptions() {
     httpOnly: true,
     secure: true,
     sameSite: 'strict' as const,
-    path: '/api/v1/auth/refresh',
+    path: '/api/v1/auth',
     maxAge: REFRESH_TTL_SECONDS,
   }
 }
