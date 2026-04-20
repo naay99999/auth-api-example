@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -10,13 +10,17 @@ export const users = sqliteTable('users', {
   updatedAt: integer('updated_at').notNull().default(sql`(unixepoch())`),
 })
 
-export const refreshTokens = sqliteTable('refresh_tokens', {
-  id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  tokenHash: text('token_hash').notNull(),
-  expiresAt: integer('expires_at').notNull(),
-  revokedAt: integer('revoked_at'),
-  createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
-})
+export const refreshTokens = sqliteTable(
+  'refresh_tokens',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: integer('expires_at').notNull(),
+    revokedAt: integer('revoked_at'),
+    createdAt: integer('created_at').notNull().default(sql`(unixepoch())`),
+  },
+  (table) => [index('refresh_tokens_user_id_idx').on(table.userId)],
+)
