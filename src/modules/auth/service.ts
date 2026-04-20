@@ -124,7 +124,7 @@ export const AuthService = {
     return { userId: existing.userId, newRawToken }
   },
 
-  async logout(rawToken: string | undefined) {
+  async logout(rawToken: string | undefined, userId: string) {
     if (!rawToken) return
 
     const tokenHash = await hashToken(rawToken)
@@ -136,6 +136,7 @@ export const AuthService = {
       .where(
         and(
           eq(refreshTokens.tokenHash, tokenHash),
+          eq(refreshTokens.userId, userId),
           isNull(refreshTokens.revokedAt),
         ),
       )

@@ -1,16 +1,19 @@
 import { Elysia } from 'elysia'
 import { jwt } from '@elysiajs/jwt'
 import { bearer } from '@elysiajs/bearer'
+import { rateLimit } from 'elysia-rate-limit'
 import { JWT_CONFIG } from '../../lib/config'
 import { AuthModel } from './model'
 import { AuthService } from './service'
+
+const ACCESS_TOKEN_EXPIRES_IN = 900 // seconds, matches JWT_CONFIG exp '15m'
 
 const authPlugin = new Elysia({ name: 'Auth.Plugin' })
   .use(jwt(JWT_CONFIG))
   .use(bearer())
   .macro({
     isAuth: {
-      async resolve({ bearer, jwt, status }: any) {
+      async resolve({ bearer, jwt, status }) {
         if (!bearer) return status(401, 'Unauthorized')
         const payload = await jwt.verify(bearer)
         if (!payload) return status(401, 'Unauthorized')
@@ -36,7 +39,7 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
       return status(201, {
         user: { id: result.userId, email: result.email, name: result.name },
         accessToken,
-        expiresIn: 900,
+        expiresIn: ACCESS_TOKEN_EXPIRES_IN,
       })
     },
     { body: 'auth.register' },
@@ -55,10 +58,13 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
       return {
         user: { id: result.userId, email: result.email, name: result.name },
         accessToken,
-        expiresIn: 900,
+        expiresIn: ACCESS_TOKEN_EXPIRES_IN,
       }
     },
-    { body: 'auth.login' },
+    {
+      body: 'auth.login',
+      use: [rateLimit({ max: 5, duration: 15 * 60 * 1000 })],
+    },
   )
   .post('/refresh', async ({ cookie: { refresh_token }, jwt }) => {
     const result = await AuthService.refresh(refresh_token.value)
@@ -67,12 +73,12 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
     const accessToken = await jwt.sign({ sub: result.userId })
     refresh_token.set({ value: result.newRawToken, ...AuthService.cookieOptions() })
 
-    return { accessToken, expiresIn: 900 }
+    return { accessToken, expiresIn: ACCESS_TOKEN_EXPIRES_IN }
   })
   .post(
     '/logout',
-    async ({ cookie: { refresh_token } }) => {
-      await AuthService.logout(refresh_token.value)
+    async ({ cookie: { refresh_token }, userId }: { userId: string; cookie: any }) => {
+      await AuthService.logout(refresh_token.value, userId)
       refresh_token.remove()
       return { message: 'Logged out successfully' }
     },
