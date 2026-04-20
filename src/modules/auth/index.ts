@@ -42,7 +42,21 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
         expiresIn: ACCESS_TOKEN_EXPIRES_IN,
       })
     },
-    { body: 'auth.register', use: [rateLimit({ max: 5, duration: 15 * 60 * 1000 })] },
+    {
+      body: 'auth.register',
+      response: {
+        201: AuthModel.authResponse,
+        409: AuthModel.textError,
+        422: AuthModel.validationError,
+        429: AuthModel.textError,
+      },
+      detail: {
+        summary: 'Register user',
+        description: 'Create a new user, issue an access token, and set a refresh token cookie.',
+        tags: ['Auth'],
+      },
+      use: [rateLimit({ max: 5, duration: 15 * 60 * 1000 })],
+    },
   )
   .post(
     '/login',
@@ -63,18 +77,44 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
     },
     {
       body: 'auth.login',
+      response: {
+        200: AuthModel.authResponse,
+        401: AuthModel.textError,
+        422: AuthModel.validationError,
+        429: AuthModel.textError,
+      },
+      detail: {
+        summary: 'Login user',
+        description: 'Authenticate a user, issue an access token, and set a refresh token cookie.',
+        tags: ['Auth'],
+      },
       use: [rateLimit({ max: 5, duration: 15 * 60 * 1000 })],
     },
   )
-  .post('/refresh', async ({ cookie: { refresh_token }, jwt }) => {
-    const result = await AuthService.refresh(refresh_token.value)
-    if (!('userId' in result)) return result
+  .post(
+    '/refresh',
+    async ({ cookie: { refresh_token }, jwt }) => {
+      const result = await AuthService.refresh(refresh_token.value)
+      if (!('userId' in result)) return result
 
-    const accessToken = await jwt.sign({ sub: result.userId })
-    refresh_token.set({ value: result.newRawToken, ...AuthService.cookieOptions() })
+      const accessToken = await jwt.sign({ sub: result.userId })
+      refresh_token.set({ value: result.newRawToken, ...AuthService.cookieOptions() })
 
-    return { accessToken, expiresIn: ACCESS_TOKEN_EXPIRES_IN }
-  })
+      return { accessToken, expiresIn: ACCESS_TOKEN_EXPIRES_IN }
+    },
+    {
+      response: {
+        200: AuthModel.refreshResponse,
+        401: AuthModel.textError,
+      },
+      detail: {
+        summary: 'Refresh access token',
+        description: 'Rotate the refresh token cookie and return a new access token.',
+        tags: ['Auth'],
+        security: [{ refreshCookie: [] }],
+      },
+    },
+  )
   .post(
     '/logout',
     async ({ cookie: { refresh_token }, userId }: { userId: string; cookie: any }) => {
@@ -82,7 +122,19 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
       refresh_token.remove()
       return { message: 'Logged out successfully' }
     },
-    { isAuth: true },
+    {
+      isAuth: true,
+      response: {
+        200: AuthModel.messageResponse,
+        401: AuthModel.textError,
+      },
+      detail: {
+        summary: 'Logout current session',
+        description: 'Revoke the current refresh token and clear the refresh token cookie.',
+        tags: ['Auth'],
+        security: [{ bearerAuth: [] }],
+      },
+    },
   )
   .post(
     '/logout-all',
@@ -91,10 +143,34 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
       refresh_token.remove()
       return { message: 'All sessions revoked' }
     },
-    { isAuth: true },
+    {
+      isAuth: true,
+      response: {
+        200: AuthModel.messageResponse,
+        401: AuthModel.textError,
+      },
+      detail: {
+        summary: 'Logout all sessions',
+        description: 'Revoke all active refresh tokens for the authenticated user.',
+        tags: ['Auth'],
+        security: [{ bearerAuth: [] }],
+      },
+    },
   )
   .get(
     '/me',
     ({ userId }: { userId: string }) => AuthService.getMe(userId),
-    { isAuth: true },
+    {
+      isAuth: true,
+      response: {
+        200: AuthModel.profile,
+        401: AuthModel.textError,
+      },
+      detail: {
+        summary: 'Get current user',
+        description: 'Return the profile for the authenticated user.',
+        tags: ['Auth'],
+        security: [{ bearerAuth: [] }],
+      },
+    },
   )
