@@ -4,6 +4,10 @@ import { jwt } from '@elysiajs/jwt'
 import { JWT_CONFIG } from './lib/config'
 import { authModule } from './modules/auth'
 
+if (!process.env.CLIENT_ORIGIN) {
+  throw new Error('CLIENT_ORIGIN is required')
+}
+
 const app = new Elysia()
   .use(cors({ origin: process.env.CLIENT_ORIGIN, credentials: true }))
   .use(jwt(JWT_CONFIG))

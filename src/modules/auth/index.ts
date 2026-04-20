@@ -16,7 +16,7 @@ const authPlugin = new Elysia({ name: 'Auth.Plugin' })
       async resolve({ bearer, jwt, status }) {
         if (!bearer) return status(401, 'Unauthorized')
         const payload = await jwt.verify(bearer)
-        if (!payload) return status(401, 'Unauthorized')
+        if (!payload || !payload.sub) return status(401, 'Unauthorized')
         return { userId: payload.sub as string }
       },
     },
@@ -42,7 +42,7 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
         expiresIn: ACCESS_TOKEN_EXPIRES_IN,
       })
     },
-    { body: 'auth.register' },
+    { body: 'auth.register', use: [rateLimit({ max: 5, duration: 15 * 60 * 1000 })] },
   )
   .post(
     '/login',
@@ -86,8 +86,9 @@ export const authModule = new Elysia({ prefix: '/api/v1/auth' })
   )
   .post(
     '/logout-all',
-    async ({ userId }: { userId: string }) => {
+    async ({ userId, cookie: { refresh_token } }: { userId: string; cookie: any }) => {
       await AuthService.logoutAll(userId)
+      refresh_token.remove()
       return { message: 'All sessions revoked' }
     },
     { isAuth: true },
